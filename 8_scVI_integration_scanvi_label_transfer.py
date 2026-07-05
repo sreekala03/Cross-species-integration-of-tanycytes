@@ -271,11 +271,6 @@ adata.obs.loc[human_mask, "scanvi_final_label"] = scanvi_model.predict(
     adata[human_mask].copy()
 )
 
-# Alternative option if you prefer to label all Unknown cells rather than all human cells:
-# adata.obs.loc[unknown_mask, "scanvi_final_label"] = scanvi_model.predict(
-#     adata[unknown_mask].copy()
-# )
-
 adata.obs["scanvi_final_label"] = pd.Categorical(
     adata.obs["scanvi_final_label"],
     categories=[f"mT.{i}" for i in range(1, 9)],
@@ -382,64 +377,6 @@ mixing_summary = (
 print("\nSpecies neighbor mixing:")
 print(mixing_summary)
 mixing_summary.to_csv(results_path / "scanvi_species_neighbor_mixing_summary.csv")
-
-
-# -----------------------------
-# Marker testing: all cells
-# -----------------------------
-
-sc.tl.rank_genes_groups(
-    adata,
-    groupby="scanvi_final_label",
-    method="wilcoxon",
-    use_raw=False,
-)
-
-markers_all = sc.get.rank_genes_groups_df(adata, group=None)
-markers_all.to_csv(
-    results_path / "markers_scanvi_final_mT_labels_all_cells.csv",
-    index=False,
-)
-
-
-# -----------------------------
-# Marker testing: mouse cells only
-# -----------------------------
-
-mouse = adata[mouse_mask].copy()
-
-sc.tl.rank_genes_groups(
-    mouse,
-    groupby="scanvi_final_label",
-    method="wilcoxon",
-    use_raw=False,
-)
-
-markers_mouse = sc.get.rank_genes_groups_df(mouse, group=None)
-markers_mouse.to_csv(
-    results_path / "mouse_markers_scanvi_final_mT_labels.csv",
-    index=False,
-)
-
-
-# -----------------------------
-# Marker testing: human cells only
-# -----------------------------
-
-human = adata[human_mask].copy()
-
-sc.tl.rank_genes_groups(
-    human,
-    groupby="scanvi_final_label",
-    method="wilcoxon",
-    use_raw=False,
-)
-
-markers_human = sc.get.rank_genes_groups_df(human, group=None)
-markers_human.to_csv(
-    results_path / "human_markers_scanvi_final_mT_labels.csv",
-    index=False,
-)
 
 
 # -----------------------------

@@ -116,7 +116,7 @@ Idents(object = Tanycytes_sub, cells = WhichCells(Tanycytes_sub, ident = c(4))) 
 Idents(object = Tanycytes_sub, cells = WhichCells(Tanycytes_sub, ident = c(2)))              <- "mT.7"
 Idents(object = Tanycytes_sub, cells = WhichCells(Tanycytes_sub, ident = c(7)))              <- "mT.8"
 
-Tanycytes_sub$Tany.rename <- Idents(object = Tanycytes_sub)
+Tanycytes_sub$Tany.cell.state <- Idents(object = Tanycytes_sub)
 plot1 = DimPlot(Tanycytes_sub, reduction = "humap") & NoLegend() #& NoAxes() for plots without axes
 LabelClusters(plot1, id = "ident", size = 4, repel = F) 
 
@@ -130,13 +130,13 @@ Idents(Tanycytes_sub) <- factor(
   )
 )
 
-Idents(Tanycytes_sub) <- "Tany.rename"
+Idents(Tanycytes_sub) <- "Tany.cell.state"
 
 # Check cell counts per mT state
-print(table(Tanycytes_sub$Tany.rename))
+print(table(Tanycytes_sub$Tany.cell.state))
 
 # Labelled UMAP
-plot_mt <- DimPlot(Tanycytes_sub, reduction = "humap", group.by = "Tany.rename") & NoLegend()
+plot_mt <- DimPlot(Tanycytes_sub, reduction = "humap", group.by = "Tany.cell.state") & NoLegend()
 plot_mt_labelled <- LabelClusters(plot_mt, id = "ident", size = 4, repel = FALSE)
 
 pdf(file.path(out_dir, "Dimplot_Tanycyte_mT_labelled.pdf"), width = 5.7, height = 4.9)
@@ -145,7 +145,7 @@ dev.off()
 
 # dittoSeq UMAP
 pdf(file.path(out_dir, "Fig1d_DittoDimplot_Tanycyte_mT.pdf"), width = 5.7, height = 4.9)
-print(dittoDimPlot(Tanycytes_sub, var = "Tany.rename", reduction.use = "humap", opacity = 0.7))
+print(dittoDimPlot(Tanycytes_sub, var = "Tany.cell.state", reduction.use = "humap", opacity = 0.7))
 dev.off()
 
 #-----------------------------
@@ -259,7 +259,7 @@ for (condition in test_conditions) {
   
   test_result <- permutation_test(
     prop_test,
-    cluster_identity = "Tany.rename",
+    cluster_identity = "Tany.cell.state",
     sample_1 = condition,
     sample_2 = reference_condition,
     sample_identity = "Sample.name_2"

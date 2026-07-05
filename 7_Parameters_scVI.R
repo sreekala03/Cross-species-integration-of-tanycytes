@@ -10,26 +10,26 @@ library(jsonlite)
 # Paths
 #-----------------------------
 
-base_path <- path.expand("~/snRNA_seq_integ/cross_species_rebuilt")
+base_path <- path.expand("~/snRNA_seq_integ/cross_species_tanycytes_LT2")
 
 param_file <- file.path(
   base_path,
-  "parameters_cross_species_tanycytes_scvi_rebuilt.json"
+  "parameters_cross_species_tanycytes_scvi_LT2.json"
 )
 
 merged_file <- file.path(
   base_path,
-  "tanycytes_cross_species_rebuilt.rds"
+  "tanycytes_cross_species_LT2.rds"
 )
 
 h5ad_file <- file.path(
   base_path,
-  "tanycytes_cross_species_rebuilt.h5ad"
+  "tanycytes_cross_species_LT2.h5ad"
 )
 
 feature_set_file <- file.path(
   base_path,
-  "shared_hvgs_rebuilt.json"
+  "shared_hvgs.json"
 )
 
 #-----------------------------
@@ -51,7 +51,7 @@ param_list <- list(
   new_name_suffix = "cross_species_tanycytes_scvi_species_batch",
   
   # General settings
-  job_id = "tanycytes_cross_species_rebuilt",
+  job_id = "tanycytes_cross_species_LT2",
   n_cores = 8,
   global_seed = 123456,
   

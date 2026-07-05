@@ -351,35 +351,6 @@ final_label_table.to_csv(results_path / "scanvi_final_label_by_species.csv")
 
 
 # -----------------------------
-# Species neighbor mixing on scANVI latent space
-# -----------------------------
-
-nn = NearestNeighbors(n_neighbors=N_NEIGHBORS + 1, metric="cosine")
-nn.fit(adata.obsm[SCANVI_LATENT_KEY])
-
-idx = nn.kneighbors(return_distance=False)
-species = adata.obs[SPECIES_KEY].values
-
-species_mixing = []
-for i in range(adata.n_obs):
-    neighbors = idx[i, 1:]
-    frac_other = np.mean(species[neighbors] != species[i])
-    species_mixing.append(frac_other)
-
-adata.obs["species_mixing"] = species_mixing
-
-mixing_summary = (
-    adata.obs
-    .groupby(["scanvi_final_label", SPECIES_KEY], observed=False)["species_mixing"]
-    .agg(["mean", "median", "count"])
-)
-
-print("\nSpecies neighbor mixing:")
-print(mixing_summary)
-mixing_summary.to_csv(results_path / "scanvi_species_neighbor_mixing_summary.csv")
-
-
-# -----------------------------
 # Export metadata, latent space, AnnData, and models
 # -----------------------------
 

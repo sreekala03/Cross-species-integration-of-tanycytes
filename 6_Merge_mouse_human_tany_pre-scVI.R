@@ -1,3 +1,5 @@
+#########Data preparation - Mouse-human orthologs and generation of merged dataset prior to scVI##########
+
 options(stringsAsFactors = FALSE)
 options(future.globals.maxSize = 3300 * 1024^2)
 set.seed(1234)
@@ -105,8 +107,8 @@ convert_species_seurat_offline <- function(seurat_object,
 ## 3. Load mouse and human data
 ############################
 
-mouse <- readRDS("D:/PROJECTS/snRNseq_integration/human_ME_full/Part1_Mouse_tany/Tanycytes_sub.rds")
-human <- readRDS("D:/PROJECTS/snRNseq_integration/human_ME_full/Part2_Tany_human_subset/Tanycytes_human_clean.rds")
+mouse <- readRDS("/human_ME_full/Part1_Mouse_tany/Tanycytes_sub.rds")
+human <- readRDS("/human_ME_full/Part2_Tany_human_subset/Tanycytes_human_clean.rds")
 
 DefaultAssay(mouse) <- "RNA"
 DefaultAssay(human) <- "RNA"
@@ -296,7 +298,6 @@ write.csv(
 ## 14. Export h5ad for scVI
 ############################
 
-# SeuratDisk works better with old-style Assay
 merged[["RNA"]] <- as(merged[["RNA"]], Class = "Assay")
 
 SeuratDisk::SaveH5Seurat(

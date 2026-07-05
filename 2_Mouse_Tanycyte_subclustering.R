@@ -14,6 +14,7 @@ suppressPackageStartupMessages({
   library(harmony)
   library(dittoSeq)
   library(scCustomize)
+  library(scProportionTest)
 })
 
 #-----------------------------
@@ -219,4 +220,64 @@ dev.off()
 #-----------------------------
 # Save final object
 #-----------------------------
-saveRDS(Tanycytes_sub, "MEPV/Tanycytes_sub_mT.rds")
+saveRDS(Tanycytes_sub, "MEPV/Tanycytes_sub.rds")
+
+#-----------------------------
+# scProportion permutation tests
+#-----------------------------
+ 
+prop_test <- sc_utils(Tanycytes_sub)
+
+reference_condition <- "Fem.Chow.Diest"
+
+test_conditions <- c(
+  "Fem.Chow.Proest",
+  "Fem.Chow.Est",
+  "Male.Chow",
+  "Male.HFDS",
+  "Fem.HFDS"
+)
+
+output_dir <- "MEPV/output/permutation_plots"
+
+dir.create(
+  output_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+prop_test_results <- list()
+
+for (condition in test_conditions) {
+  
+  comparison_name <- paste(
+    reference_condition,
+    "vs",
+    condition,
+    sep = "_"
+  )
+  
+  test_result <- permutation_test(
+    prop_test,
+    cluster_identity = "Tany.rename",
+    sample_1 = condition,
+    sample_2 = reference_condition,
+    sample_identity = "Sample.name_2"
+  )
+  
+  prop_test_results[[comparison_name]] <- test_result
+  
+  plot_obj <- permutation_plot(test_result)
+  
+  pdf(
+    file = file.path(
+      output_dir,
+      paste0(comparison_name, ".pdf")
+    ),
+    width = 5.2,
+    height = 2.3
+  )
+  
+  print(plot_obj)
+  dev.off()
+}

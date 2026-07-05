@@ -9,9 +9,7 @@
 # -----------------------------
 # 0. Package installation
 # -----------------------------
-# Run this section only once if packages are not already installed.
-
-# if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+# # if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
 # BiocManager::install(c(
 #   "AUCell", "RcisTarget", "GENIE3", "zoo", "mixtools", "rbokeh",
 #   "DT", "NMF", "ComplexHeatmap", "R2HTML", "Rtsne", "doRNG"
@@ -52,7 +50,7 @@ library(doParallel)
 library(ComplexHeatmap)
 library(reshape2)
 
-project_dir <- "/home/sreekalanampoothiri/single_cell_ME_2021/Tanycyte_scenic"
+project_dir <- "/Tanycyte_scenic"
 setwd(project_dir)
 
 dir.create("int", showWarnings = FALSE)
@@ -67,7 +65,7 @@ dir.create("output/tables", recursive = TRUE, showWarnings = FALSE)
 Tanycytes_sub <- readRDS(file.path(project_dir, "Tanycytes_sub.rds"))
 
 # Check required metadata columns before downstream summaries.
-required_metadata <- c("Sample.name", "Sample.name_3", "Tany.rename")
+required_metadata <- c("Sample.name_2", "Tany.cell.state")
 missing_metadata <- setdiff(required_metadata, colnames(Tanycytes_sub@meta.data))
 
 if (length(missing_metadata) > 0) {
@@ -155,7 +153,7 @@ scenicOptions <- runSCENIC_2_createRegulons(
 # Step 3: score regulon activity in individual cells with AUCell.
 scenicOptions <- runSCENIC_3_scoreCells(scenicOptions, exprMat_filtered)
 
-saveRDS(scenicOptions, file = "int/scenicOptions_after_auc.rds")
+saveRDS(scenicOptions, file = "int/scenicOptions.rds")
 
 # -----------------------------
 # 7. Optional: manually adjust AUCell thresholds
@@ -177,10 +175,10 @@ saveRDS(scenicOptions, file = "int/scenicOptions_after_auc.rds")
 scenicOptions@settings$devType <- "png"
 scenicOptions <- runSCENIC_4_aucell_binarize(scenicOptions)
 
-saveRDS(scenicOptions, file = "int/scenicOptions_final.rds")
+saveRDS(scenicOptions, file = "int/scenicOptions.rds")
 
 # -----------------------------
-# 9. Optional: t-SNE on regulon AUC matrix
+# 9. t-SNE on regulon AUC matrix
 # -----------------------------
 
 scenicOptions@settings$seed <- 123
@@ -211,7 +209,7 @@ print(tsneFileName(scenicOptions))
 regulons <- loadInt(scenicOptions, "regulons")
 
 # Example: inspect specific regulons if present.
-regulons[c("Irf7", "Glis3")]
+regulons[c("Irf7")]
 
 aucell_regulons <- loadInt(scenicOptions, "aucell_regulons")
 head(cbind(onlyNonDuplicatedExtended(names(aucell_regulons))))
@@ -312,36 +310,21 @@ regulonAUC <- regulonAUC[onlyNonDuplicatedExtended(rownames(regulonAUC)), ]
 sample_results <- plot_regulon_activity_by_group(
   seurat_obj = Tanycytes_sub,
   regulon_auc = regulonAUC,
-  group_by = "Sample.name",
+  group_by = "Sample.name_2",
   output_prefix = "SCENIC_by_Sample.name",
   cluster_columns = FALSE
 )
 
 # -----------------------------
-# 13. Regulon heatmap by collapsed sample group
-# -----------------------------
-# Use this section for the May 2025 grouping if Sample.name_3 exists.
-
-if ("Sample.name_3" %in% colnames(Tanycytes_sub@meta.data)) {
-  sample3_results <- plot_regulon_activity_by_group(
-    seurat_obj = Tanycytes_sub,
-    regulon_auc = regulonAUC,
-    group_by = "Sample.name_3",
-    output_prefix = "SCENIC_by_Sample.name_3",
-    cluster_columns = FALSE
-  )
-}
-
-# -----------------------------
-# 14. Regulon heatmap by tanycyte mT state
+# 13. Regulon heatmap by tanycyte mT state
 # -----------------------------
 # This uses the mT.1-mT.8 annotation column.
 
-if ("Tany.rename" %in% colnames(Tanycytes_sub@meta.data)) {
+if ("Tany.cell.state" %in% colnames(Tanycytes_sub@meta.data)) {
   mt_results <- plot_regulon_activity_by_group(
     seurat_obj = Tanycytes_sub,
     regulon_auc = regulonAUC,
-    group_by = "Tany.rename",
+    group_by = "Tany.cell.state",
     output_prefix = "SCENIC_by_mT_state",
     cluster_columns = TRUE
   )
@@ -351,4 +334,4 @@ if ("Tany.rename" %in% colnames(Tanycytes_sub@meta.data)) {
 # 15. Save workspace
 # -----------------------------
 
-save.image("SCENIC_tanycytes_cleaned.RData")
+save.image("SCENIC_tanycytes.RData")

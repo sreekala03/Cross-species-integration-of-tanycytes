@@ -1,7 +1,6 @@
-##### Tanycyte Subclustering #####
-## Cleaned script: keeps only mT.1–mT.8 annotation
+##### Mouse Tanycyte Subclustering from MEPV object #####
 
-setwd("D:/PROJECTS/Single_cell_Jan_2021/BATCH1/ANALYSIS_High_fat_ME/singlecell_ME_HFD/Reanalysis_part1/Single_cell_manuscript")
+setwd("/Single_cell_manuscript")
 
 options(stringsAsFactors = FALSE)
 options(future.globals.maxSize = 3300 * 1024^2)
@@ -20,7 +19,7 @@ suppressPackageStartupMessages({
 #-----------------------------
 # Paths
 #-----------------------------
-main_rds <- "MEPV/MEPV_cells_v3.rds"
+main_rds <- "MEPV/MEPV_cells.rds"
 out_dir  <- "MEPV/output"
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -106,21 +105,28 @@ dev.off()
 # 2 -> mT.7
 # 7 -> mT.8
 #-----------------------------
-cluster_to_mt <- c(
-  "5" = "mT.1",
-  "3" = "mT.2",
-  "6" = "mT.3",
-  "1" = "mT.4",
-  "0" = "mT.5",
-  "4" = "mT.6",
-  "2" = "mT.7",
-  "7" = "mT.8"
-)
+Idents(Tanycytes_sub) <-  "seurat_clusters"
+Idents(object = Tanycytes_sub, cells = WhichCells(Tanycytes_sub, ident = c(5)))              <- "mT.1"
+Idents(object = Tanycytes_sub, cells = WhichCells(Tanycytes_sub, ident = c(3)))              <- "mT.2"
+Idents(object = Tanycytes_sub, cells = WhichCells(Tanycytes_sub, ident = c(6)))              <- "mT.3"
+Idents(object = Tanycytes_sub, cells = WhichCells(Tanycytes_sub, ident = c(1)))              <- "mT.4"
+Idents(object = Tanycytes_sub, cells = WhichCells(Tanycytes_sub, ident = c(0)))              <- "mT.5"
+Idents(object = Tanycytes_sub, cells = WhichCells(Tanycytes_sub, ident = c(4)))              <- "mT.6"
+Idents(object = Tanycytes_sub, cells = WhichCells(Tanycytes_sub, ident = c(2)))              <- "mT.7"
+Idents(object = Tanycytes_sub, cells = WhichCells(Tanycytes_sub, ident = c(7)))              <- "mT.8"
 
-Tanycytes_sub$Tany.rename <- unname(cluster_to_mt[as.character(Tanycytes_sub$seurat_clusters)])
-Tanycytes_sub$Tany.rename <- factor(
-  Tanycytes_sub$Tany.rename,
-  levels = paste0("mT.", 1:8)
+Tanycytes_sub$Tany.rename <- Idents(object = Tanycytes_sub)
+plot1 = DimPlot(Tanycytes_sub, reduction = "humap") & NoLegend() #& NoAxes() for plots without axes
+LabelClusters(plot1, id = "ident", size = 4, repel = F) 
+
+#Tanycytes_sub <- readRDS("D:/PROJECTS/snRNseq_integration/human_ME_full/Part1_Mouse_tany/Tanycytes_sub.rds")
+
+Idents(Tanycytes_sub) <- factor(
+  Idents(Tanycytes_sub),
+  levels = c(
+    "mT.1","mT.2","mT.3","mT.4",
+    "mT.5","mT.6","mT.7","mT.8"
+  )
 )
 
 Idents(Tanycytes_sub) <- "Tany.rename"
@@ -132,12 +138,12 @@ print(table(Tanycytes_sub$Tany.rename))
 plot_mt <- DimPlot(Tanycytes_sub, reduction = "humap", group.by = "Tany.rename") & NoLegend()
 plot_mt_labelled <- LabelClusters(plot_mt, id = "ident", size = 4, repel = FALSE)
 
-pdf(file.path(out_dir, "Fig4_Dimplot_Tanycyte_mT_labelled.pdf"), width = 5.7, height = 4.9)
+pdf(file.path(out_dir, "Dimplot_Tanycyte_mT_labelled.pdf"), width = 5.7, height = 4.9)
 print(plot_mt_labelled)
 dev.off()
 
 # dittoSeq UMAP
-pdf(file.path(out_dir, "Fig4_DittoDimplot_Tanycyte_mT.pdf"), width = 5.7, height = 4.9)
+pdf(file.path(out_dir, "Fig1d_DittoDimplot_Tanycyte_mT.pdf"), width = 5.7, height = 4.9)
 print(dittoDimPlot(Tanycytes_sub, var = "Tany.rename", reduction.use = "humap", opacity = 0.7))
 dev.off()
 
@@ -152,10 +158,49 @@ write.csv(
   row.names = FALSE
 )
 
+mouse_genes_to_plot2 <- c(
+  "Gpr37l1","Ntsr2","Rfx4","Sema6d","Slc1a2",
+  "Shisa9","Rgs20","Rspo3", "Tgfb2", "Flt1","Nr2f2","Adgb","Vwa5b1",
+  "Dnah11","Tppp3","Ctxn1","Hipk1",
+  "Vcan","Crym","Ephb1","Rorb",
+  "Fgf10","Tox2","Mob3b","Frzb","Adamtsl1","Gria3","Dio2","Gpc3","Deptor",
+  "Col25a1","Mest",
+  "A2m","B2m","Cd44","Ifi44","Ifitm2","Ifitm3","Ifi27", "Gpx1","Cited1",
+  "H2-K1",      
+  "Cd74",
+  "Irf7",
+  "Cxcl10"       
+  
+  dot_mouse_markers = DotPlot(object = Tanycytes_sub, 
+        features = mouse_genes_to_plot2,
+        assay = "SCT",
+        scale = T,
+        cols = "RdYlBu") +
+  geom_point(aes(size=pct.exp), shape = 21, stroke=0.02) +
+  theme(text = element_text(size = 10),
+        axis.text.x = element_text(hjust = 1,
+                                   vjust = 0.5,
+                                   size = 11,
+                                   color = "black"),
+        axis.text.y = element_text(size = 11),
+        legend.text = element_text(size=9))+
+  labs(title = "", x = "", y = "") +
+  guides(colour = guide_colorbar(title = "Scaled average expression",
+                                 order = 1)) +  RotatedAxis() 
+
+dot_mouse
+ggsave(
+  filename = file.path(out_dir, "Dotplot_mouse_markers.pdf"),
+  plot = dot_mouse_markers,
+  width = 13.7,
+  height = 3.2,
+  units = "in"
+)
+
 #-----------------------------
 # Highlight mT.8
 #-----------------------------
-pdf(file.path(out_dir, "Fig7_Highlight_mT8.pdf"), width = 6, height = 4.8)
+pdf(file.path(out_dir, "Fig1h_Highlight_mT8.pdf"), width = 6, height = 4.8)
 print(
   DimPlot(
     Tanycytes_sub,
@@ -166,23 +211,9 @@ print(
 )
 dev.off()
 
-pdf(file.path(out_dir, "Fig7_Highlight_mT8_split_by_sample.pdf"), width = 12, height = 8)
-print(
-  DimPlot(
-    Tanycytes_sub,
-    reduction = "humap",
-    cells.highlight = WhichCells(Tanycytes_sub, idents = "mT.8"),
-    sizes.highlight = 1.5,
-    split.by = "Sample.name"
-  )
-)
-dev.off()
-
-#-----------------------------
-# Optional feature plot
-#-----------------------------
-pdf(file.path(out_dir, "CD44.pdf"), width = 4, height = 4)
-print(FeaturePlot(Tanycytes_sub, features = "Cd44", reduction = "humap", order = TRUE))
+#Feature plot
+pdf(file.path(out_dir, "Fig.1i_Ifitm3.pdf"), width = 4, height = 4)
+print(FeaturePlot(Tanycytes_sub, features = "Ifitm3", reduction = "humap", order = TRUE))
 dev.off()
 
 #-----------------------------

@@ -11,17 +11,10 @@ library(readr)
 library(pheatmap)
 library(RColorBrewer)
 
-out_dir <- "human_ME_full/Part2_Tany_human_subset"
-# dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+out_dir <- "output/human_ME_full/Part2_Tany_human_subset"
+dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
-#human_ME <- readRDS("D:/PROJECTS/snRNA_humanME/Human_ME/median_eminence_20122024.rds")
-human_ME <- readRDS("D:/PROJECTS/snRNseq_integration/human_ME_full/Part2_Tany_human_subset/human_ME_full_obj.rds")
-DimPlot(human_ME, label = T, order = T, pt.size = 0.1)
-Idents(human_ME) <- "seurat_clusters"
-DimPlot(human_ME, label = T, order = T, pt.size = 0.1)
-
-Idents(human_ME) <- "ann_level_3"
-DimPlot(human_ME, label = T, order = T, pt.size = 0.1)
+human_ME <- readRDS("/human_ME_full/Part2_Tany_human_subset/human_ME_full_obj.rds")
 
 ################################################LEVEL 1 annotation####################################
 Idents(object = human_ME) <- "seurat_clusters"
@@ -69,7 +62,7 @@ col.pal$celltype <- c("Astrocytes"="#A6CEE3", "Tanycytes"="#CBD52E", "Ependymocy
 DimPlot(human_ME, group.by = "Level1", cols = col.pal$celltype, label = T) & NoAxes() & NoLegend() 
 cell_no_level1 = as.data.frame(table(human_ME$Level1))
 
-pdf("human_ME_full/1_Dim_human_ME_unlabelled.pdf", width = 15, height = 12)
+pdf("human_ME_full/Fig1c_Dim_human_ME_unlabelled.pdf", width = 15, height = 12)
 DimPlot(human_ME, group.by = "Level1", cols = (col.pal$celltype), pt.size = 0.5) & NoAxes() & NoLegend()
 dev.off()   
 
@@ -234,27 +227,9 @@ human_ME$Level2 <- factor(
 )
 
 Idents(human_ME) <- human_ME$Level2
-
-
 DimPlot(human_ME, group.by = "Level2", cols = celltype_cols$cell_type) & NoAxes()  
-
 saveRDS(human_ME, "human_ME_full/human_ME_full_obj.rds")
 
-# pdf("human_ME_full/2_Dim_human_ME_level2_unlabelled.pdf", width = 15, height = 12)
-# DimPlot(human_ME, group.by = "Level2", cols = (celltype_cols$cell_type), pt.size = 0.5) & NoAxes() & NoLegend()
-# dev.off()
-# 
-# 
-# 
-# pdf("human_ME_full/2_Dim_human_ME_level2_labelled.pdf", width = 10.7, height = 5.8)
-# DimPlot(human_ME, group.by = "Level2", cols = celltype_cols$cell_type) & NoAxes()  
-# dev.off()
-# 
-# 
-# cell.no = as.data.frame(table(human_ME$Level2))
-# 
-# 
-# 
 
 
 

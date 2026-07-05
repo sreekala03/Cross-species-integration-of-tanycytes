@@ -1,61 +1,120 @@
-####Single cell ME PV analysis#########
+####Single cell RNA sequencing mouse MBH clustering#########
 ##02 11 2023
 
-setwd("D:/PROJECTS/Single_cell_Jan_2021/BATCH1/ANALYSIS_High_fat_ME/singlecell_ME_HFD/Reanalysis_part1/Single_cell_manuscript")
+# -----------------------------
+# 0. Setup
+# -----------------------------
+
 options(stringsAsFactors = FALSE)
 options(future.globals.maxSize = 3300 * 1024^2)
 set.seed(1234)
-library(dplyr)
-library(Seurat)
-library(patchwork)
-library(ggplot2)
-library(Nebulosa)
-library(harmony)
-library(readr)
-library(venn)
-library(dplyr)
-library(cowplot)
-library(ggplot2)
-library(pheatmap)
-library(enrichR)
-library(rafalib)
-library(multtest)
-library(metap)
-library(RColorBrewer)
 
-MEPV_cells <- readRDS("D:/PROJECTS/Single_cell_Jan_2021/BATCH1/ANALYSIS_High_fat_ME/singlecell_ME_HFD/RDS_files/mito_reg_ribo_stress_v2/samples_mito_reg_ribo_stress_v2.rds")
-
-###### LOAD SAMPLES & CREATE SEURAT OBJECT#######
-
-MEPV_sample_list<-lapply(paste0("s",1:9),function(s){
-  sample<-CreateSeuratObject(Read10X(file.path("/data/Raw",s)),project = "MBH")
-  sample[["sample"]]<-s
-  sample<-PercentageFeatureSet(sample,pattern = "^mt-",col.name = "percent.mt")
-  sample<-subset(sample, subset = nCount_RNA < 20000 & nFeature_RNA > 500 & nFeature_RNA < 4000 & percent.mt < 15)
-  counts<- GetAssayData(sample, assay="RNA")
-  Rpl.genes <- rownames(counts) %>% stringr::str_subset(string = ., pattern = "^Rp[sl]")
-  counts<-counts[-(which(rownames(counts) %in% c('Ehd2', 'Espl1', 'Jarid1d', 'Pnpla4',  'Rps4y1', 'Xist', 'Tsix', 'Eif2s3y', 'Ddx3y', 'Uty', 'Kdm5d', 'Fos', 'Fosb', 'Gstp1', 'Egr1', 'Jun', 'Junb', 'Jund','Erh', 'Slc25a5', 'Pgk1', 'Eno1', 'Npas4', 'Tubb2a', 'Emc4', 'Scg5', Rpl.genes, 'Gm42418'))),]
-  sample<-subset(sample, features=rownames(counts))
-  return(sample)
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(stringr)
+  library(Seurat)
+  library(harmony)
+  library(ggplot2)
+  library(patchwork)
+  library(cowplot)
+  library(RColorBrewer)
+  library(corrplot)
+  library(dittoSeq)
 })
 
+project_dir <- "/Single_cell_manuscript"
+raw_data_dir <- "/data/Raw"
+output_dir <- file.path(project_dir, "MEPV", "output")
+rds_dir <- file.path(project_dir, "MEPV")
 
-####### Merge samples ###########
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(rds_dir, recursive = TRUE, showWarnings = FALSE)
 
-MEPV_cells <-Reduce(merge, MEPV_sample_list)
-var_features <- SelectIntegrationFeatures(object.list = MEPV_sample_list, nfeatures = 3000, fvf.nfeatures = 3000)
+setwd(project_dir)
 
-MEPV_cells <- RunPCA(MEPV_cells,features = var_features)
-ElbowPlot(MEPV_cells)
+# -----------------------------
+# 1. Load samples and create Seurat objects
+# -----------------------------
 
-DimHeatmap(MEPV_cells, dims = 47:50, cells = 500, balanced = T)
+sample_ids <- paste0("s", 1:9)
 
-MEPV_cells <- RunUMAP(object = MEPV_cells, dims = 1:50)
-DimPlot(MEPV_cells,group.by="sample")+ggtitle("merged")
+##sex and dissociation bias genes
+genes_to_remove <- c(
+  "Ehd2", "Espl1", "Jarid1d", "Pnpla4", "Rps4y1", "Xist", "Tsix",
+  "Eif2s3y", "Ddx3y", "Uty", "Kdm5d",
+  "Fos", "Fosb", "Gstp1", "Egr1", "Jun", "Junb", "Jund",
+  "Erh", "Slc25a5", "Pgk1", "Eno1", "Npas4", "Tubb2a",
+  "Emc4", "Scg5", "Gm42418"
+)
 
+create_sample_object <- function(sample_id, raw_data_dir) {
+  message("Processing sample: ", sample_id)
 
+  sample_obj <- CreateSeuratObject(
+    counts = Read10X(file.path(raw_data_dir, sample_id)),
+    project = "MBH"
+  )
 
-######## Adding metadata and reordering samples #########
+  sample_obj$sample <- sample_id
+
+  sample_obj <- PercentageFeatureSet(
+    object = sample_obj,
+    pattern = "^mt-",
+    col.name = "percent.mt"
+  )
+
+  sample_obj <- subset(
+    sample_obj,
+    subset = nCount_RNA < 20000 &
+      nFeature_RNA > 500 &
+      nFeature_RNA < 4000 &
+      percent.mt < 15
+  )
+
+  counts <- GetAssayData(sample_obj, assay = "RNA", slot = "counts")
+  ribosomal_genes <- rownames(counts) %>% str_subset("^Rp[sl]")
+
+  keep_features <- setdiff(rownames(counts), c(genes_to_remove, ribosomal_genes))
+  sample_obj <- subset(sample_obj, features = keep_features)
+
+  return(sample_obj)
+}
+
+MEPV_sample_list <- lapply(sample_ids, create_sample_object, raw_data_dir = raw_data_dir)
+names(MEPV_sample_list) <- sample_ids
+
+# -----------------------------
+# 2. Merge samples
+# -----------------------------
+
+MEPV_cells <- Reduce(function(x, y) merge(x, y), MEPV_sample_list)
+
+var_features <- SelectIntegrationFeatures(
+  object.list = MEPV_sample_list,
+  nfeatures = 3000,
+  fvf.nfeatures = 3000
+)
+
+MEPV_cells <- SCTransform(MEPV_cells, vars.to.regress = "percent.mt", verbose = FALSE)
+
+MEPV_cells <- RunPCA(MEPV_cells, features = var_features, verbose = FALSE)
+
+pdf(file.path(output_dir, "QC_elbow_plot.pdf"), width = 6, height = 5)
+print(ElbowPlot(MEPV_cells))
+dev.off()
+
+pdf(file.path(output_dir, "QC_dim_heatmap_47_50.pdf"), width = 10, height = 8)
+print(DimHeatmap(MEPV_cells, dims = 47:50, cells = 500, balanced = TRUE))
+dev.off()
+
+MEPV_cells <- RunUMAP(MEPV_cells, dims = 1:50, reduction = "pca")
+
+pdf(file.path(output_dir, "QC_merged_umap_by_sample.pdf"), width = 7, height = 6)
+print(DimPlot(MEPV_cells, group.by = "sample") + ggtitle("Merged samples"))
+dev.off()          
+                     
+                     
+######## 3. Adding metadata and reordering samples #########
 
 MEPV_cells[["Sex"]]<-ifelse(MEPV_cells$sample%in%c("s1","s2","s4"),"Male","Female")
 MEPV_cells[["Diet"]]<-sapply(MEPV_cells$sample,function(s)ifelse(s%in%c("s1","s3","s7","s8"),"Chow",
@@ -81,304 +140,237 @@ MEPV_cells[["Sample.name_2"]]<-sapply(MEPV_cells$sample,function(s)ifelse(s%in%c
                                                                                                                          ifelse(s%in%c("s9"),"Fem.HFDR")))))))))
 
 
-Tanycytes_sub[["Sample.name_2"]]<-sapply(Tanycytes_sub$sample,function(s)ifelse(s%in%c("s1"),"Male.Chow",
-                                                                          ifelse(s%in%c("s2"),"Male.HFDS",
-                                                                                 ifelse(s%in%c("s3"),"Fem.Chow.Diest",
-                                                                                        ifelse(s%in%c("s4"),"Male.HFDR",
-                                                                                               ifelse(s%in%c("s5", "s6"),"Fem.HFDS",
-                                                                                                      ifelse(s%in%c("s7"),"Fem.Chow.Proest",
-                                                                                                             ifelse(s%in%c("s8"),"Fem.Chow.Est",
-                                                                                                                    ifelse(s%in%c("s9"),"Fem.HFDR")))))))))
 
 
+# -----------------------------
+# 4. Harmony integration
+# -----------------------------
 
+MEPV_cells <- RunHarmony(
+  object = MEPV_cells,
+  group.by.vars = "Sample.name",
+  assay.use = "SCT",
+  plot_convergence = TRUE
+)
 
+MEPV_cells <- RunUMAP(
+  object = MEPV_cells,
+  dims = 1:50,
+  reduction = "harmony",
+  reduction.name = "humap",
+  reduction.key = "hUMAP_",
+  metric = "euclidean"
+)
 
-######### INTERGRATION USING HARMONY ################
+pdf(file.path(output_dir, "Harmony_umap_by_sample.pdf"), width = 7, height = 6)
+print(DimPlot(MEPV_cells, reduction = "humap", group.by = "sample") +
+        ggtitle("Harmony integrated, dims 1:50"))
+dev.off()
 
-library(harmony)
-MEPV_cells<-RunHarmony(samples,group.by.vars = "Sample.name",assay.use = "SCT", plot_convergence=TRUE)
-# Harmony converged after 9 iterations
-MEPV_cells <- RunUMAP(object = samples, dims = 1:50, reduction = "harmony", reduction.name = "humap",reduction.key = "hUMAP_", metric = 'euclidean')
-p1 <- DimPlot(samples,reduction="humap",group.by="sample")+ggtitle("Harmony integrated 1:50")
-p1
+pdf(file.path(output_dir, "Harmony_umap_split_by_sample.pdf"), width = 12, height = 8)
+print(DimPlot(MEPV_cells, reduction = "humap", split.by = "sample") +
+        ggtitle("Harmony integrated"))
+dev.off()
 
-DimPlot(MEPV_cells,reduction="humap",split.by="sample")+ggtitle("Harmony integrated")
+                                      
+                                      
+# -----------------------------
+# 5. Clustering
+# -----------------------------
 
-########## CLUSTERING ###########
+MEPV_cells <- FindNeighbors(
+  object = MEPV_cells,
+  dims = 1:50,
+  reduction = "harmony"
+)
 
-MEPV_cells <- FindNeighbors(object = MEPV_cells, dims = 1:50,reduction = "harmony") 
-MEPV_cells <- FindClusters(object = MEPV_cells, resolution = 1) 
-MEPV_cells <- RunUMAP(object = MEPV_cells, dims = 1:50,reduction = "harmony", reduction.name = "humap",reduction.key = "hUMAP_", metric="euclidean")
+MEPV_cells <- FindClusters(
+  object = MEPV_cells,
+  resolution = 1
+)
 
-DimPlot(MEPV_cells, reduction = "humap", label=TRUE)+ggtitle("Whole Integrated dataset, res=1, dim 1:50")
+pdf(file.path(output_dir, "Clusters_harmony_res1_dims1_50.pdf"), width = 8, height = 6)
+print(DimPlot(MEPV_cells, reduction = "humap", label = TRUE) +
+        ggtitle("Whole integrated dataset, resolution = 1, dims 1:50"))
+dev.off()
 
-p2 <- DimPlot(MEPV_cells, split.by ="Sample.name", reduction = "humap", label=TRUE)+ggtitle("Whole Integrated dataset, res=0.8")
-
-DimPlot(MEPV_cells, reduction = "humap", label=TRUE)
-DimPlot(MEPV_cells_1, reduction = "humap", label=TRUE)
-
-##################### Cluster Markers  #########################
+# -----------------------------
+# 6. Cluster markers
+# -----------------------------
 
 Idents(MEPV_cells) <- "seurat_clusters"
 
 MEPV_cells <- PrepSCTFindMarkers(MEPV_cells, assay = "SCT", verbose = TRUE)
-Markers_int<-FindAllMarkers(MEPV_cells, min.pct=0.25, only.pos = TRUE, logfc.threshold = 0.4)
-write.csv(Markers, "MEPV/output/Markers_int.csv")
 
+markers_int <- FindAllMarkers(
+  object = MEPV_cells,
+  min.pct = 0.25,
+  only.pos = TRUE,
+  logfc.threshold = 0.4
+)
 
-############# CELL TYPE ANNOTATION ###############
+write.csv(
+  markers_int,
+  file.path(output_dir, "Markers_mouse_MBH_seurat.csv"),
+  row.names = FALSE
+)
 
-Idents(object = MEPV_cells) <- "seurat_clusters"
+# -----------------------------
+# 7. Cell type annotation
+# -----------------------------
 
-#Level1 annotation 
+assign_cluster_labels <- function(seurat_obj, cluster_to_label, output_column) {
+  Idents(seurat_obj) <- "seurat_clusters"
 
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(4, 21, 29)))       <- "VLMC"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(11)))              <- "Plvap Endothelial"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(1)))               <- "Endothelial cells"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(14, 24)))          <- "Pericytes"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(23)))              <- "VSMC"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(22, 31)))          <- "Ccl5+"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(10, 30)))          <- "Microglia" 
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(17,32)))           <- "CAMs" 
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(15)))              <- "Progenitors"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(20)))              <- "Differentiating"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(3,5, 33, 34, 26))) <- "Mature"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(27)))              <- "Lhb.Npy.Rax+"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(7,2,9,13)))        <- "Tanycytes"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(35)))              <- "Npy+"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(8,16)))            <- "Cell membrane projections"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(19)))              <- "Avp+"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(25)))              <- "Oxt+"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(0,12)))            <- "Astrocytes"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(18, 28)))          <- "Pars.Tuberalis"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(6)))               <- "Ependymocytes"
+  cluster_labels <- as.character(seurat_obj$seurat_clusters)
 
-MEPV_cells$Level1 <- Idents(object = MEPV_cells)
+  for (label in names(cluster_to_label)) {
+    cluster_labels[cluster_labels %in% as.character(cluster_to_label[[label]])] <- label
+  }
 
-plot1 = DimPlot(MEPV_cells, reduction = "humap") & theme(legend.text = element_text(size = 6)) & NoLegend() #& NoAxes() for plots without axes
-LabelClusters(plot1, id = "ident", size = 4, repel = T)
+  seurat_obj[[output_column]] <- cluster_labels
+  return(seurat_obj)
+}
 
-################################################LEVEL2 annotation####################################
-Idents(object = MEPV_cells) <- "seurat_clusters"
+level1_map <- list(
+  "VLMC" = c(4, 21, 29),
+  "Plvap Endothelial" = 11,
+  "Endothelial cells" = 1,
+  "Pericytes" = c(14, 24),
+  "VSMC" = 23,
+  "Ccl5+" = c(22, 31),
+  "Microglia" = c(10, 30),
+  "CAMs" = c(17, 32),
+  "Progenitors" = 15,
+  "Differentiating" = 20,
+  "Mature" = c(3, 5, 33, 34, 26),
+  "Lhb.Npy.Rax+" = 27,
+  "Tanycytes" = c(7, 2, 9, 13),
+  "Npy+" = 35,
+  "Cell membrane projections" = c(8, 16),
+  "Avp+" = 19,
+  "Oxt+" = 25,
+  "Astrocytes" = c(0, 12),
+  "Pars.Tuberalis" = c(18, 28),
+  "Ependymocytes" = 6
+)
 
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(4)))               <- "VLMC.1"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(21)))              <- "VLMC.2"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(29)))              <- "Dural fibroblasts"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(11)))              <- "Plvap Endothelial"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(1)))               <- "Endothelial cells"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(14, 24)))          <- "Pericytes"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(23)))              <- "VSMC"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(22, 31)))          <- "Immune cells"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(10, 30)))          <- "Microglia" 
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(17,32)))           <- "CAMs" 
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(15)))              <- "Progenitors"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(20)))              <- "Differentiating"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(33,26,3,5,34)))     <- "Mature"
-#Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(27)))              <- "Lhb.Npy.Rax+"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(7)))               <- "DMH tanycytes"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(2)))               <- "VMH/dmARH tanycytes"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(9)))               <- "vmARH tanycytes"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(13)))              <- "ME tanycytes"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(35)))              <- "Npy+"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(8,16)))            <- "Cell membrane projections"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(19)))              <- "Avp+"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(25)))              <- "Oxt+"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(0,12)))            <- "Astrocytes"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(18)))              <- "Pars.Tuberalis"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(28)))              <- "Tight junction epithelial"
-Idents(object = MEPV_cells, cells = WhichCells(MEPV_cells, ident = c(6)))               <- "Ependymocytes"
+level2_map <- list(
+  "VLMC.1" = 4,
+  "VLMC.2" = 21,
+  "Dural fibroblasts" = 29,
+  "Plvap Endothelial" = 11,
+  "Endothelial cells" = 1,
+  "Pericytes" = c(14, 24),
+  "VSMC" = 23,
+  "Immune cells" = c(22, 31),
+  "Microglia" = c(10, 30),
+  "CAMs" = c(17, 32),
+  "Progenitors" = 15,
+  "Differentiating" = 20,
+  "Mature" = c(33, 26, 3, 5, 34),
+  "Lhb.Npy.Rax+" = 27,
+  "DMH tanycytes" = 7,
+  "VMH/dmARH tanycytes" = 2,
+  "vmARH tanycytes" = 9,
+  "ME tanycytes" = 13,
+  "Npy+" = 35,
+  "Cell membrane projections" = c(8, 16),
+  "Avp+" = 19,
+  "Oxt+" = 25,
+  "Astrocytes" = c(0, 12),
+  "Pars.Tuberalis" = 18,
+  "Tight junction epithelial" = 28,
+  "Ependymocytes" = 6
+)
 
-MEPV_cells$Level2 <- Idents(object = MEPV_cells)
-plot1 = DimPlot(MEPV_cells, reduction = "humap") & NoLegend() #& NoAxes() for plots without axes
-LabelClusters(plot1, id = "ident", size = 4, repel = F) 
+MEPV_cells <- assign_cluster_labels(MEPV_cells, level1_map, "Level1")
+MEPV_cells <- assign_cluster_labels(MEPV_cells, level2_map, "Level2")
 
-MEPV_cells
-# An object of class Seurat 
-# 49838 features across 47194 samples within 2 assays 
-# Active assay: SCT (18914 features, 0 variable features)
-# 1 other assay present: RNA
-# 4 dimensional reductions calculated: pca, umap, harmony, humap
+Idents(MEPV_cells) <- "Level1"
 
-
-#No of cells in each cluster each condition
-Idents (object = MEPV_cells) <-"Level2"
-cell_num_v1 = table(Idents(MEPV_cells), MEPV_cells$Sample.name)
-write.csv(cell_num_v1, "MEPV/output/Cell_number_v1.csv")
-
-##Remove Lhb.Npy.Rax+ cells
-
-Idents(object = MEPV_cells) <- "Level2"
-MEPV_cells <-subset(MEPV_cells, idents=c("Lhb.Npy.Rax+"), invert = T)
-MEPV_cells
-# An object of class Seurat 
-# 49838 features across 46922 samples within 2 assays 
-# Active assay: SCT (18914 features, 0 variable features)
-# 1 other assay present: RNA
-# 4 dimensional reductions calculated: pca, umap, harmony, humap
-
-#No of cells in each cluster each condition
-Idents (object = MEPV_cells) <-"Level2"
-cell_num_v2 = table(Idents(MEPV_cells), MEPV_cells$Sample.name)
-write.csv(cell_num_v2, "MEPV/output/Cell_number_v2.csv")
-
-##Rearrange Idents order 
-
-MEPV_cells$Level2 <- factor(MEPV_cells$Level2,levels=c("Astrocytes", "Ependymocytes", "DMH tanycytes", "VMH/dmARH tanycytes", "vmARH tanycytes", 
-                                                       "ME tanycytes", "Npy+", "Cell membrane projections", "Avp+", "Oxt+", 
-                                                       "Microglia", "CAMs", "Immune cells", "Endothelial cells","Plvap Endothelial","Pericytes","VSMC",
-                                                       "VLMC.1", "VLMC.2", "Dural fibroblasts", "Pars.Tuberalis", "Tight junction epithelial",
-                                                       "Progenitors", "Differentiating", "Mature"))
-
-###Assign colors to clusters####
-
-col.pal <- list()
-col.pal$celltype <- c("Astrocytes"="#A6CEE3", "DMH tanycytes"="#1F78B4", "VMH/dmARH tanycytes"="#B2DF8A", 
-                      "vmARH tanycytes"="#33A02C", "ME tanycytes"="red",
-                      "Npy+"="deeppink","Oxt+"="#FF7F00","Cell membrane projections"= "#CAB2D6", 
-                      "Avp+"="#6A3D9A", "Immune cells"="#D95F02", "VLMC.1"="#abc4ff", 
-                      "VLMC.2"="#B15928","Dural fibroblasts"="#CBD52E","Microglia"="#7570B3", 
-                      "CAMs"="#E7298A", "Pars.Tuberalis"="#66A61E", "Tight junction epithelial"="#E6AB02",
-                      "Plvap Endothelial"="#A6761D","Endothelial cells"="lightsalmon", "Pericytes"="yellow2","VSMC"="tomato1",
-                      "Mature"="#0466c8", "Progenitors"="#38b000", "Differentiating"="ivory4", "Ependymocytes"="darkgoldenrod1")
-col.pal <- list()
-col.pal$celltype <- c("Astrocytes"="#829399", "DMH tanycytes"="#1F78B4", "VMH/dmARH tanycytes"="#B2DF8A", 
-                      "vmARH tanycytes"="#33A02C", "ME tanycytes"="#FB9A99",
-                      "Npy+"="#E31A1C","Oxt+"="#CAB2D6","Cell membrane projections"= "#6A3D9A", 
-                      "Avp+"="#CBD52E", "Immune cells"="#B15928", "VLMC.1"="#1B9E77", 
-                      "VLMC.2"="#D95F02","Dural fibroblasts"="#CBD52E","Microglia"="#7570B3", 
-                      "CAMs"="#E7298A", "Pars.Tuberalis"="#66A61E", "Tight junction epithelial"="#E6AB02",
-                      "Plvap Endothelial"="#FF7F00","Endothelial cells"="#abc4ff", "Pericytes"="yellow2","VSMC"="tomato1",
-                      "Mature"="#0466c8", "Progenitors"="#38b000", "Differentiating"="ivory4", "Ependymocytes"="darkgoldenrod1")
-
-
-
-pdf("MEPV/output/Fig1_Dimplot_harmony_labelled.pdf", width = 12.5, height = 8)
-DimPlot(MEPV_cells, group.by = "seurat_clusters", cols = col.pal$celltype, reduction = "humap" , label.box = T) & NoLegend() & NoAxes()
+pdf(file.path(output_dir, "Level1_annotation_umap.pdf"), width = 8, height = 6)
+plot_level1 <- DimPlot(MEPV_cells, reduction = "humap") &
+  theme(legend.text = element_text(size = 6)) &
+  NoLegend()
+print(LabelClusters(plot_level1, id = "ident", size = 4, repel = TRUE))
 dev.off()
 
-pdf("MEPV/output/Fig1_Clustering_unlabelled.pdf", width = 6.1, height = 5)
-DimPlot(MEPV_cells, group.by = "Level2", cols = (col.pal$celltype), reduction = "humap", pt.size = 0.7) & NoAxes()
-dev.off()
-
-pdf("MEPV/output/Fig1_Dimplot_harmony_clusters.pdf", width = 12.5, height = 8)
-DimPlot(MEPV_cells, group.by = "seurat_clusters", reduction = "humap" , label = T) & NoAxes()
-dev.off()
-
-saveRDS(MEPV_cells, "MEPV/MEPV_cells_v3.rds")
-
-##############Marker Plot################
 Idents(MEPV_cells) <- "Level2"
-Markers_ano <-FindAllMarkers(MEPV_cells, min.pct=0.25, only.pos = TRUE, logfc.threshold = 0.6)
-Markers_ano2 <-FindAllMarkers(MEPV_cells, min.pct=0.25, only.pos = TRUE, logfc.threshold = 2)
 
-
-write.csv(Markers_ano, "MEPV/output/Markers_ano2.csv")
-
-
-Markers_ano2 %>%
-  group_by(cluster) %>%
-  top_n(n = 5, wt = avg_log2FC) -> top5
-top5 <- top5[!duplicated(top5$gene),]
-
-pdf("MEPV/output/Figure 1b_Dotplot_markers annotated_flip2.pdf", width = 9, height = 18)
-DotPlot(object = MEPV_cells_1, 
-        features = (top5$gene), 
-        group.by = "Level2",
-        assay = "SCT",
-        scale = T,
-        col.max = 2, 
-        col.min = -2, cols = "RdYlBu") +
-  geom_point(aes(size=pct.exp), shape = 21, stroke=0.02) +
-  theme(text = element_text(size = 10),
-        axis.text.x = element_text(angle = 90,
-                                   hjust = 1,
-                                   vjust = 0.5,
-                                   size = 11,
-                                   color = "black"),
-        axis.text.y = element_text(size = 11),
-        legend.text = element_text(size=9))+
-  labs(title = "", x = "", y = "") +
-  guides(colour = guide_colorbar(title = "Scaled average expression", 
-                                 order = 1)) 
+pdf(file.path(output_dir, "Level2_annotation_umap.pdf"), width = 8, height = 6)
+plot_level2 <- DimPlot(MEPV_cells, reduction = "humap") & NoLegend()
+print(LabelClusters(plot_level2, id = "ident", size = 4, repel = FALSE))
 dev.off()
 
-saveRDS(object = MEPV_cells, "MEPV/MEPV_cells_v2.rds")
+# Remove Lhb.Npy.Rax+ cells- dissocitaion artefact anterior pituitary 
+MEPV_cells <- subset(MEPV_cells, subset = Level2 != "Lhb.Npy.Rax+")
 
+cell_num_v2 <- table(MEPV_cells$Level2, MEPV_cells$Sample.name)
+write.csv(cell_num_v2, file.path(output_dir, "Cell_number_v2.csv"))
 
-#####Distribution of cell types across conditions#######
+# -----------------------------
+# 9. Reorder identities and define colors
+# -----------------------------
 
-#reorder sample conditions
-MEPV_cells$Sample.name <- factor(MEPV_cells$Sample.name,levels=c("Fem.Chow.Diest", "Fem.Chow.Proest", "Fem.Chow.Est", "Fem.HFDR", "Fem.HFDS", "Fem.HFDS+D", "Male.Chow", "Male.HFDR", "Male.HFDS"))
+level2_order <- c(
+  "Astrocytes", "Ependymocytes", "DMH tanycytes", "VMH/dmARH tanycytes",
+  "vmARH tanycytes", "ME tanycytes", "Npy+", "Cell membrane projections",
+  "Avp+", "Oxt+", "Microglia", "CAMs", "Immune cells",
+  "Endothelial cells", "Plvap Endothelial", "Pericytes", "VSMC",
+  "VLMC.1", "VLMC.2", "Dural fibroblasts", "Pars.Tuberalis",
+  "Tight junction epithelial", "Progenitors", "Differentiating", "Mature"
+)
 
-Idents(object = MEPV_cells) <- "Level2"
-cells_by_cluster = as.matrix(table(Idents(MEPV_cells), MEPV_cells$Sample.name))
+MEPV_cells$Level2 <- factor(MEPV_cells$Level2, levels = level2_order)
 
-# 1. convert the data as a table
-cells_by_cluster <- as.table(as.matrix(cells_by_cluster))
-#Compute Chi-square residuals
-chisq <- chisq.test(cells_by_cluster)
-chisq
+celltype_colors <- c(
+  "Astrocytes" = "#829399",
+  "Ependymocytes" = "darkgoldenrod1",
+  "DMH tanycytes" = "#1F78B4",
+  "VMH/dmARH tanycytes" = "#B2DF8A",
+  "vmARH tanycytes" = "#33A02C",
+  "ME tanycytes" = "#FB9A99",
+  "Npy+" = "#E31A1C",
+  "Oxt+" = "#CAB2D6",
+  "Cell membrane projections" = "#6A3D9A",
+  "Avp+" = "#CBD52E",
+  "Immune cells" = "#B15928",
+  "VLMC.1" = "#1B9E77",
+  "VLMC.2" = "#D95F02",
+  "Dural fibroblasts" = "#CBD52E",
+  "Microglia" = "#7570B3",
+  "CAMs" = "#E7298A",
+  "Pars.Tuberalis" = "#66A61E",
+  "Tight junction epithelial" = "#E6AB02",
+  "Plvap Endothelial" = "#FF7F00",
+  "Endothelial cells" = "#abc4ff",
+  "Pericytes" = "yellow2",
+  "VSMC" = "tomato1",
+  "Mature" = "#0466c8",
+  "Progenitors" = "#38b000",
+  "Differentiating" = "ivory4"
+)
 
-#Pearson's Chi-squared test
-# data:  cells_by_cluster
-# X-squared = 9007, df = 200, p-value < 2.2e-16
+# -----------------------------
+# 10. Main UMAP plots
+# -----------------------------
 
-# Observed counts
-chisq$observed
-
-# Expected counts
-round(chisq$expected,0)
-
-round(chisq$residuals, 0)
-
-library(corrplot)
-pdf(file = "MEPV/output/Figure1_corrplot_cells_cond.pdf",   # The directory you want to save the file in
-    width = 4.6, # The width of the plot in inches
-    height = 6.2) # The height of the plot in inches
-corrplot(chisq$residuals, is.cor = FALSE, tl.col = 'black', cl.cex = 0.8, tl.cex = 0.8,cl.ratio = 0.5,col = rev(brewer.pal(n=8, name="RdYlBu")))
+pdf(file.path(output_dir, "Fig1_Dimplot_harmony_labelled.pdf"), width = 12.5, height = 8)
+print(DimPlot(
+  MEPV_cells,
+  group.by = "Level2",
+  cols = celltype_colors,
+  reduction = "humap",
+  label = TRUE,
+  label.box = TRUE
+) & NoLegend() & NoAxes())
 dev.off()
 
-#For a given cell, the size of the circle is proportional to the amount of the cell contribution.
-
-# Contibution in percentage (%)
-contrib <- 100*chisq$residuals^2/chisq$statistic
-write.csv(contrib, "MEPV/output/contrib_cell_chi_sq.csv")
-round(contrib, 3)
-
-# Visualize the contribution
-library(RColorBrewer)
-corrplot(contrib, is.cor = FALSE, tl.col = 'black', cl.cex = 0.8, tl.cex = 0.8,cl.ratio = 0.5, col = (brewer.pal(n=8, name="YlOrRd")))
-
-FeaturePlot(MEPV_cells, c("Tnfrsf11a"), reduction = "humap", order = TRUE, min.cutoff = "q50")
-FeaturePlot(MEPV_cells, c("Tmem119"), reduction = "humap", order = TRUE, min.cutoff = "q50")
-FeaturePlot(MEPV_cells, c("Tnfsf11"), reduction = "humap", order = TRUE)
-FeaturePlot(MEPV_cells, c("Tppp3"), reduction = "humap", order = TRUE)
-
-FeaturePlot(MEPV_cells, c("Olig1"), reduction = "humap", order = TRUE)
-
-FeaturePlot(ventricuar_cells, c("IRF7"), reduction = "integrated", order = TRUE)
-
-colnames(x = ventricuar_cells[["scvi"]]@cell.embeddings) <- paste0("scvi_", 1:2)
-
-DimPlot(ventricuar_cells, group.by = "C4")
-
-dittoBarPlot(MEPV_cells, "Level2", group.by = "Sample.name")
-
-FeaturePlot(MEPV_cells, c("Irf7"), reduction = "humap", order = TRUE ) & scale_colour_viridis(option = "C", direction = -1, na.value = "grey50")
-
-library(dittoSeq)
-pdf("MEPV/output/Fig1_DittoMEPV_labelled.pdf", width = 12.5, height = 8)
-dittoDimPlot(MEPV_cells, var = "Level2",reduction.use = 'humap', opacity = 0.5)
-dev.off()
+saveRDS(MEPV_cells, file.path(rds_dir, "MEPV_cells.rds"))
 
 
-#proportion of OSNs by PCW
-levels(Tanycytes_sub) <- c("Fem.Chow.Proest", "Fem.Chow.Est", "Fem.Chow.Diest", "Fem.HFDR", "Fem.HFDS", "Fem.HFDS+D", "Male.Chow", "Male.HFDR", "Male.HFDS")
 
 
-Idents(Tanycytes_sub) <-  "Tany.cell.state"
-Tany8 <-subset(Tanycytes_sub, idents=c("Tany.8"))
+                                      
 
-
-saveRDS(object = MEPV_cells, "D:/PUBLICATIONS AND REVIEWS/Manuscript_single_cell_2024/Manu_final_submit/Raw data/Script/MEPV_cells.rds")

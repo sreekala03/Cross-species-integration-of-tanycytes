@@ -1,14 +1,9 @@
 # ------------------------------------------------------------
 # scANVI mouse-reference label-transfer metrics
-# Summary tables only; no bar plots or heatmaps
+#
 #
 # This block can be run after the main scANVI label-transfer script,
-# after the following fields have been created:
-#   adata.obsm["X_scANVI"]
-#   adata.obs["species"]
-#   adata.obs["scanvi_final_label"]
-#   adata.obs["scanvi_confidence"]
-# ------------------------------------------------------------
+#  ------------------------------------------------------------
 
 from pathlib import Path
 
@@ -250,7 +245,7 @@ ilisi_summary.to_csv(
 )
 
 # -----------------------------
-# 6. Combined manuscript summary table
+# 6. Combined summary table
 # -----------------------------
 
 mouse_counts = (

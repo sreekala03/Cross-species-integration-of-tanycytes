@@ -515,9 +515,8 @@ DefaultAssay(mouse) <- "SCT"
 ############################################################
 ## 2. Set mouse annotations
 ############################################################
-## Replace this if your mouse subtype column has a different name
 
-Idents(mouse) <- "Tany.rename"
+Idents(mouse) <- "Tany.cell.state"
 
 ############################################################
 ## 3. Find markers for final human tanycyte groups

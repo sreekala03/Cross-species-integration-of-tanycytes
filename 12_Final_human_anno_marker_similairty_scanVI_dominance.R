@@ -3,7 +3,7 @@
 ## 1. Human and mouse marker overlap
 ## 2. Jaccard similarity
 ## 3. scANVI transferred labels
-## 4. Annotation table and selected visualizations
+## 4. Annotation table and visualizations
 ############################################################
 
 options(stringsAsFactors = FALSE)

@@ -647,3 +647,54 @@ plot(
 )
 
 dev.off()
+
+######Human tanycyte marker genes plot#########
+human_genes_to_plot2 = c("GPR37L1", "NTSR2", "RFX4", "SEMA6D","SLC1A2", "SHISA9", "RGS20", #hT.1 and mT.1
+                        "RSPO3","TGFB2","FLT1","NR2F2", #mT2 unique; hT2 not present in humans
+                        "ADGB", "VWA5B1", "DNAH11", #present in mT3 and mT4  
+                        "TPPP3", "CTXN1", "HIPK1", #present in both mT3 and mT4 but enriched in hT4 
+                        "VCAN","CRYM","EPHB1","RORB",
+                        "FGF10", "TOX2", "MOB3B","FRZB","ADAMTSL1","GRIA3","DIO2","GPC3","DEPTOR", 
+                        "COL25A1", "MEST", "A2M","B2M", #ME T7
+                        "CD44","IFI44", "IFITM2", "IFITM3","IFI27","GPX1",  #immune - T8
+                        "CITED1", "HLA-C", "H3-3A","CD59","CD74") # "CXCL14", "IFI27","HLA-DRB1") 
+
+
+human$Tany_grouped <- factor(
+  human$Tany_grouped,
+  levels = rev(c(
+    "hT.1",
+    "hT.3",
+    "hT.4",
+    "hT.5-6",
+    "hT.7",
+    "hT.8"
+  ))
+)
+
+Idents(human) <- "Tany_grouped"
+dot_human = DotPlot(object = human, ,
+        features = human_genes_to_plot2,
+        assay = "SCT",
+        scale = T,
+        cols = "RdYlBu") +
+  geom_point(aes(size=pct.exp), shape = 21, stroke=0.02) +
+  theme(text = element_text(size = 10),
+        axis.text.x = element_text(hjust = 1,
+                                   vjust = 0.5,
+                                   size = 11,
+                                   color = "black"),
+        axis.text.y = element_text(size = 11),
+        legend.text = element_text(size=9))+
+  labs(title = "", x = "", y = "") +
+  guides(colour = guide_colorbar(title = "Scaled average expression",
+                                 order = 1)) +  RotatedAxis() 
+ 
+dot_human
+ggsave(
+  filename = file.path(plot_dir, "Dotplot_human_markers.pdf"),
+  plot = dot_human,
+  width = 13.7,
+  height = 3.2,
+  units = "in"
+)

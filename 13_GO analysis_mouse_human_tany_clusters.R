@@ -1,6 +1,5 @@
 ####################################
 # GO Biological Process enrichment
-# and selected-term dumbbell plot
 ####################################
 
 library(Seurat)

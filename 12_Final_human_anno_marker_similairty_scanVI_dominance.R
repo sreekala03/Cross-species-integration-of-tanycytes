@@ -672,7 +672,7 @@ human$Tany_grouped <- factor(
 )
 
 Idents(human) <- "Tany_grouped"
-dot_human = DotPlot(object = human, ,
+dot_human = DotPlot(object = human,
         features = human_genes_to_plot2,
         assay = "SCT",
         scale = T,

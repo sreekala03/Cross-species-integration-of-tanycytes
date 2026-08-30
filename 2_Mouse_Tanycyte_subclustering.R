@@ -189,7 +189,7 @@ mouse_genes_to_plot2 <- c(
   guides(colour = guide_colorbar(title = "Scaled average expression",
                                  order = 1)) +  RotatedAxis() 
 
-dot_mouse
+dot_mouse_markers
 ggsave(
   filename = file.path(out_dir, "Dotplot_mouse_markers.pdf"),
   plot = dot_mouse_markers,

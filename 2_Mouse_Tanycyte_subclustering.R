@@ -170,7 +170,7 @@ mouse_genes_to_plot2 <- c(
   "H2-K1",      
   "Cd74",
   "Irf7",
-  "Cxcl10"       
+  "Cxcl10")       
   
   dot_mouse_markers = DotPlot(object = Tanycytes_sub, 
         features = mouse_genes_to_plot2,
